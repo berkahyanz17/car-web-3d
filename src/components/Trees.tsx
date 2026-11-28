@@ -1,12 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { CylinderCollider, RigidBody } from '@react-three/rapier'
 import { useControls } from 'leva'
 import { Color, CylinderGeometry, ConeGeometry, Object3D, type InstancedMesh } from 'three'
-import { useGameStore } from '../store/useGameStore'
-import { FLAT_RADIUS, TERRAIN_SIZE, createRng, type HeightFn } from '../utils/terrainMath'
+import { TREE_SPOTS } from '../data/jatinangor'
+import { mapToWorld } from '../utils/campusCoords'
+import { createRng, type HeightFn } from '../utils/terrainMath'
 
-const SPAWN_CLEARANCE = FLAT_RADIUS + 8 // no trees inside this radius
-const MIN_SPACING = 4
 const TRUNK_HEIGHT = 1.6
 const FOLIAGE_HEIGHT = 3
 const FOLIAGE_COLORS = ['#2f7d4f', '#3a8f5a', '#28694a', '#4a9d5b']
@@ -20,23 +19,31 @@ interface TreeData {
   color: number
 }
 
+/**
+ * Trees go on the pre-computed spots (forest patches of the drone photo, clear of roads,
+ * buildings and ponds). The seed shuffles which spots get used and jitters them.
+ */
 function scatterTrees(count: number, seed: number, heightFn: HeightFn): TreeData[] {
   const rng = createRng(seed)
-  const half = TERRAIN_SIZE / 2 - 8
-  const trees: TreeData[] = []
-  let attempts = 0
+  const total = TREE_SPOTS.length / 2
+  const order = Array.from({ length: total }, (_, i) => i)
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    const a = order[i] ?? 0
+    order[i] = order[j] ?? 0
+    order[j] = a
+  }
 
-  while (trees.length < count && attempts < count * 60) {
-    attempts++
-    const x = (rng() * 2 - 1) * half
-    const z = (rng() * 2 - 1) * half
-    if (Math.hypot(x, z) < SPAWN_CLEARANCE) continue
-    if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < MIN_SPACING)) continue
+  const trees: TreeData[] = []
+  for (const index of order.slice(0, Math.min(count, total))) {
+    const [bx, bz] = mapToWorld(TREE_SPOTS[index * 2] ?? 0, TREE_SPOTS[index * 2 + 1] ?? 0)
+    const x = bx + (rng() - 0.5) * 2
+    const z = bz + (rng() - 0.5) * 2
     trees.push({
       x,
       y: heightFn(x, z),
       z,
-      scale: 0.8 + rng() * 0.7,
+      scale: 0.8 + rng() * 0.8,
       rotation: rng() * Math.PI * 2,
       color: Math.floor(rng() * FOLIAGE_COLORS.length),
     })
@@ -52,16 +59,11 @@ interface TreesProps {
 
 export function Trees({ heightFn, signature }: TreesProps) {
   const { count, seed } = useControls('Trees', {
-    count: { value: 200, min: 0, max: 600, step: 10 },
+    count: { value: 450, min: 0, max: 1600, step: 50 },
     seed: { value: 42, step: 1, label: 'seed' },
   })
 
   const trees = useMemo(() => scatterTrees(count, seed, heightFn), [count, seed, heightFn])
-
-  const setMapTrees = useGameStore((state) => state.setMapTrees)
-  useEffect(() => {
-    setMapTrees(trees.map((tree) => ({ x: tree.x, z: tree.z })))
-  }, [trees, setMapTrees])
 
   const trunkGeometry = useMemo(() => {
     const geometry = new CylinderGeometry(0.22, 0.3, TRUNK_HEIGHT, 6)

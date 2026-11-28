@@ -2,85 +2,11 @@ import { useEffect, useRef } from 'react'
 import { Quaternion, Vector3 } from 'three'
 import { atmosphere } from '../store/atmosphere'
 import { useGameStore } from '../store/useGameStore'
-import { TERRAIN_SIZE, type HeightFn } from '../utils/terrainMath'
-import { RAMPS, RAMP_HALF } from './Terrain'
+import { PX_PER_M, getGroundCanvas } from '../utils/groundPaint'
+import { GROUND_D, GROUND_W } from '../utils/terrainMath'
 
 const SIZE = 168 // css px
-const VIEW_PX_PER_M = 1.3 // zoom: radius 84 px ~ 65 m
-const BAKE_PX_PER_M = 1.5 // resolution of the baked terrain image
-
-const LOW = [58, 120, 66] as const
-const HIGH = [186, 214, 140] as const
-
-/** Bakes terrain shading, trees and ramps into one static image (re-run only when they change). */
-function bakeMap(heightFn: HeightFn, trees: ReadonlyArray<{ x: number; z: number }>): HTMLCanvasElement {
-  const px = Math.round(TERRAIN_SIZE * BAKE_PX_PER_M)
-  const canvas = document.createElement('canvas')
-  canvas.width = px
-  canvas.height = px
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return canvas
-
-  const toWorld = (i: number) => i / BAKE_PX_PER_M - TERRAIN_SIZE / 2
-  const heights = new Float32Array(px * px)
-  let min = Infinity
-  let max = -Infinity
-  for (let j = 0; j < px; j++) {
-    for (let i = 0; i < px; i++) {
-      const h = heightFn(toWorld(i), toWorld(j))
-      heights[j * px + i] = h
-      if (h < min) min = h
-      if (h > max) max = h
-    }
-  }
-  const range = Math.max(max - min, 1e-3)
-
-  const image = ctx.createImageData(px, px)
-  for (let j = 0; j < px; j++) {
-    for (let i = 0; i < px; i++) {
-      const h = heights[j * px + i] ?? 0
-      const t = (h - min) / range
-      // Cheap hillshade: slope toward the light (up-left) brightens.
-      const left = heights[j * px + Math.max(i - 1, 0)] ?? h
-      const up = heights[Math.max(j - 1, 0) * px + i] ?? h
-      const shade = 1 + Math.max(Math.min(((left - h) + (up - h)) * 0.35, 0.35), -0.35)
-      const o = (j * px + i) * 4
-      for (let c = 0; c < 3; c++) {
-        const value = (LOW[c] ?? 0) + ((HIGH[c] ?? 0) - (LOW[c] ?? 0)) * t
-        image.data[o + c] = Math.max(0, Math.min(255, value * shade))
-      }
-      image.data[o + 3] = 255
-    }
-  }
-  ctx.putImageData(image, 0, 0)
-
-  const toPx = (v: number) => (v + TERRAIN_SIZE / 2) * BAKE_PX_PER_M
-
-  // Ramps (plan view)
-  ctx.fillStyle = '#e0a458'
-  for (const ramp of RAMPS) {
-    ctx.save()
-    ctx.translate(toPx(ramp.position[0]), toPx(ramp.position[1]))
-    ctx.rotate(-ramp.rotationY)
-    const length = RAMP_HALF[2] * 2 * Math.cos((ramp.angleDeg * Math.PI) / 180)
-    ctx.fillRect(
-      -RAMP_HALF[0] * BAKE_PX_PER_M,
-      (-length / 2) * BAKE_PX_PER_M,
-      RAMP_HALF[0] * 2 * BAKE_PX_PER_M,
-      length * BAKE_PX_PER_M,
-    )
-    ctx.restore()
-  }
-
-  // Trees
-  ctx.fillStyle = '#1f5a36'
-  for (const tree of trees) {
-    ctx.beginPath()
-    ctx.arc(toPx(tree.x), toPx(tree.z), 1.6, 0, Math.PI * 2)
-    ctx.fill()
-  }
-  return canvas
-}
+const VIEW_PX_PER_M = 1.1 // zoom: the 168 px circle shows ~150 m
 
 const pos = new Vector3()
 const quat = new Quaternion()
@@ -89,20 +15,6 @@ const forward = new Vector3()
 /** Heading-up circular minimap drawn on a 2D canvas (outside the R3F canvas). */
 export function Minimap() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const baked = useRef<HTMLCanvasElement | null>(null)
-
-  // Re-bake whenever terrain or trees change.
-  useEffect(() => {
-    const rebuild = () => {
-      const { mapTerrain, mapTrees } = useGameStore.getState()
-      baked.current = mapTerrain ? bakeMap(mapTerrain.heightFn, mapTrees) : null
-    }
-    rebuild()
-    return useGameStore.subscribe((state, previous) => {
-      if (state.mapTerrain !== previous.mapTerrain || state.mapTrees !== previous.mapTrees) rebuild()
-    })
-  }, [])
-
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -121,8 +33,8 @@ export function Minimap() {
       ctx.clearRect(0, 0, SIZE, SIZE)
 
       const car = useGameStore.getState().chassis
-      const map = baked.current
-      if (!car || !map) return
+      if (!car) return
+      const map = getGroundCanvas() // painted once, shared with the ground texture
 
       car.getWorldPosition(pos)
       car.getWorldQuaternion(quat)
@@ -138,13 +50,9 @@ export function Minimap() {
 
       ctx.translate(c, c)
       ctx.rotate(theta)
-      const k = VIEW_PX_PER_M / BAKE_PX_PER_M
+      const k = VIEW_PX_PER_M / PX_PER_M
       ctx.scale(k, k)
-      ctx.drawImage(
-        map,
-        -(pos.x + TERRAIN_SIZE / 2) * BAKE_PX_PER_M,
-        -(pos.z + TERRAIN_SIZE / 2) * BAKE_PX_PER_M,
-      )
+      ctx.drawImage(map, -(pos.x + GROUND_W / 2) * PX_PER_M, -(pos.z + GROUND_D / 2) * PX_PER_M)
       ctx.restore()
 
       // Night tint

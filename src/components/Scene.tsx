@@ -18,8 +18,10 @@ import {
 import { atmosphere } from '../store/atmosphere'
 import { useGameStore } from '../store/useGameStore'
 import { createRng } from '../utils/terrainMath'
+import { Buildings } from './Buildings'
 import { Car } from './Car'
 import { CameraRig } from './CameraRig'
+import { Labels } from './Labels'
 import { Letters } from './Letters'
 import { Terrain, useTerrainShape } from './Terrain'
 import { Trees } from './Trees'
@@ -32,8 +34,8 @@ const DAY = {
   ambientIntensity: 0.7,
   sun: new Color('#fff4e0'),
   sunIntensity: 2.2,
-  fogNear: 70,
-  fogFar: 240,
+  fogNear: 90,
+  fogFar: 320,
   bodyColor: new Color('#fff3b0'),
   bodyScale: 18,
 }
@@ -255,12 +257,14 @@ export function Scene() {
         {/* Fixed 60 Hz step: the same simulation on 60 Hz and 144 Hz screens. */}
         <Physics gravity={[0, -9.81, 0]} timeStep={1 / 60} debug={debug}>
           <Terrain {...terrain} />
+          <Buildings />
           <Trees heightFn={terrain.heightFn} signature={terrain.signature} />
           <Letters />
           <Car />
         </Physics>
       </Suspense>
 
+      <Labels />
       <CameraRig />
     </>
   )

@@ -9,11 +9,15 @@ import {
 } from '@react-three/rapier'
 import { useControls } from 'leva'
 import { MathUtils, Quaternion, Vector3, type Group, type SpotLight } from 'three'
+import { SPAWN_PX } from '../data/jatinangor'
 import { atmosphere } from '../store/atmosphere'
+import { mapToWorld } from '../utils/campusCoords'
 import { useKeyboard } from '../hooks/useKeyboard'
 import { useGameStore } from '../store/useGameStore'
 
-export const SPAWN_POSITION: [number, number, number] = [0, 1.5, 0]
+const [SPAWN_X, SPAWN_Z] = mapToWorld(...SPAWN_PX)
+/** Parking lot beside the Rektorat; the car faces -Z (north, up the main road). */
+export const SPAWN_POSITION: [number, number, number] = [SPAWN_X, 1.5, SPAWN_Z]
 
 const CHASSIS_HALF: [number, number, number] = [0.8, 0.25, 1.6]
 const WHEEL_RADIUS = 0.35

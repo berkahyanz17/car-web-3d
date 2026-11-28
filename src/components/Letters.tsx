@@ -4,6 +4,8 @@ import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import { useControls } from 'leva'
 import { Font } from 'three/examples/jsm/loaders/FontLoader.js'
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
+import { SPAWN_PX } from '../data/jatinangor'
+import { mapToWorld } from '../utils/campusCoords'
 import fontJson from '../assets/fonts/helvetiker_bold.typeface.json'
 
 type Text3DFont = ComponentProps<typeof Text3D>['font']
@@ -15,7 +17,10 @@ const FONT_DATA = fontJson as unknown as Text3DFont
 
 const CURVE_SEGMENTS = 6
 const GROUND_CLEARANCE = 0.02
-const LETTERS_Z = -7 // in front of the spawn (car faces -Z), before the ramps
+// Row centred 12 m ahead of the spawn (car faces -Z), on the parking lot.
+const [SPAWN_X, SPAWN_Z] = mapToWorld(...SPAWN_PX)
+const LETTERS_X = SPAWN_X
+const LETTERS_Z = SPAWN_Z - 12
 const COLORS = ['#e63946', '#f4a261', '#e9c46a', '#2a9d8f', '#4361ee', '#9d4edd']
 
 interface LetterLayout {
@@ -53,7 +58,7 @@ function layoutLetters(text: string, size: number, depth: number): LetterLayout[
         const cz = depth / 2
         letters.push({
           char,
-          position: [cursor + cx, height / 2 + GROUND_CLEARANCE, LETTERS_Z],
+          position: [LETTERS_X + cursor + cx, height / 2 + GROUND_CLEARANCE, LETTERS_Z],
           glyphOffset: [-cx, -cy, -cz],
           halfExtents: [width / 2, height / 2, depth / 2],
           color: COLORS[letters.length % COLORS.length] ?? '#e63946',
